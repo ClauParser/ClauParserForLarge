@@ -21,6 +21,8 @@ int main(void)
 	}
 	int b = clock();
 
+	std::cout << b - a << "ms" << "\n";
+
 	wiz::LoadData::SaveWizDB(global, buffer, "output.eu4");
 
 	if (buffer) {
@@ -33,8 +35,6 @@ int main(void)
 		}
 		delete pool;
 	}
-
-	std::cout << b - a << "ms" << "\n";
 
 
 	return 0;
