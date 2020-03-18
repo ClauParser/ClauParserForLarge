@@ -353,13 +353,13 @@ namespace wiz {
 	class MemoryPool
 	{
 	public:
+		long long root = 0;
 		int pool_id = -1;
 		Node* arr = nullptr;
 		//	Node static_else_list[10]; // todo - real depth in real data? < 10 ?
 		std::vector<Node> else_list;
 		long long count = 0;
 		long long size = 0;
-		long long root = 0;
 	public:
 		explicit MemoryPool() {
 			else_list.reserve(10);
@@ -652,11 +652,11 @@ namespace wiz {
 						return -1;
 					}
 					else if (next && !ut) {
-						Pointer temp = utPool.Get();
+						Pointer temp = Node::MakeNode(utPool);
 						
 						temp->Link(ut_temp);
 
-						ut = ut_temp;
+						ut = temp;
 					}
 					else {
 						return 0;
@@ -665,13 +665,14 @@ namespace wiz {
 			}
 		}
 		// todo - return  bool-type?
-		static void SaveToFile(const std::string& fileName, const wiz::MemoryPool& pool) {
+		static void SaveToFile(const std::string& fileName, const wiz::MemoryPool& pool, long long root) {
 			std::ofstream outFile;
 			outFile.open(fileName, std::ios::binary);
 			if (outFile) {
 				long long num = pool.count;
 
 				outFile.write((const char*)&num, sizeof(num));
+				outFile.write((const char*)&root, sizeof(root));
 				outFile.write((const char*)pool.arr, sizeof(Node) * num);
 
 				outFile.close();
@@ -683,21 +684,27 @@ namespace wiz {
 
 			if (inFile) {
 				long long count = 0;
+				long long root;
 				inFile.read((char*)&count, sizeof(count));
+				inFile.read((char*)&root, sizeof(root));
 
 				if (count > pool.size) {
-					pool.Clear();
+					pool.Clear(); pool.else_list.clear();
 					
 					pool.arr = new Node[count];
 					pool.count = count;
 					pool.size = count;
 
 					inFile.read((char*)pool.arr, sizeof(Node) * count);
+
+					pool.root = root;
 				}
 				else {
 					pool.else_list.clear();
 					
 					inFile.read((char*)pool.arr, sizeof(Node) * count);
+
+					pool.root = root;
 				}
 
 				inFile.close();
@@ -1038,10 +1045,14 @@ namespace wiz {
 			bool first = true;
 			long long sum = 0;
 
-			{
+			long long try_num = 1;
+
+			for(long long L=1; L <= try_num; ++L) {
 				std::set<long long> _pivots;
 				std::vector<long long> pivots;
-				const long long num = token_arr_len; //
+
+				const long long num_end  = L == try_num ? token_arr_len : token_arr_len / try_num * (L); //
+				const long long num_start = token_arr_len / try_num * (L - 1);
 
 				if (pivot_num > 0) {
 					std::vector<long long> pivot;
@@ -1049,7 +1060,8 @@ namespace wiz {
 					pivot.reserve(pivot_num);
 
 					for (int i = 0; i < pivot_num; ++i) {
-						pivot.push_back(FindDivisionPlace(buffer, token_arr, (num / (pivot_num + 1)) * (i), (num / (pivot_num + 1)) * (i + 1) - 1, option));
+						pivot.push_back(FindDivisionPlace(buffer, token_arr, num_start + ((num_end - num_start) / (pivot_num + 1)) * (i),
+							num_start + ((num_end - num_start) / (pivot_num + 1)) * (i + 1) - 1, option));
 					}
 
 					for (int i = 0; i < pivot.size(); ++i) {
@@ -1079,7 +1091,7 @@ namespace wiz {
 					std::vector<std::thread> thr(pivots.size() + 1);
 
 					{
-						long long idx = pivots.empty() ? num - 1 : pivots[0];
+						long long idx = pivots.empty() ? num_end : pivots[0];
 						long long _token_arr_len = idx - 0 + 1;
 
 
@@ -1094,7 +1106,7 @@ namespace wiz {
 					}
 
 					if (pivots.size() >= 1) {
-						long long _token_arr_len = num - 1 - (pivots.back() + 1) + 1;
+						long long _token_arr_len = num_end - 1 - (pivots.back() + 1) + 1;
 
 						thr[pivots.size()] = std::thread(__LoadData, buffer, token_arr + pivots.back() + 1, _token_arr_len, &__global[pivots.size()],
 							&option, 0, 0, &next[pivots.size()], (*pool)[pivots.size()]);
@@ -1107,14 +1119,14 @@ namespace wiz {
 
 					// Merge
 					try { // chk empty global?
-						if (__global[0]->child && __global[0]->child->type == -1) {
+						/*if (__global[0]->child && __global[0]->child->type == -1) {
 							std::cout << "not valid file1\n";
 							throw 1;
 						}
 						if (next.back()->GetParent() && next.back()->GetParent()->GetParent().isNULL == false) {
 							std::cout << "not valid file2\n";
 							throw 2;
-						}
+						}*/
 
 						/*
 						SaveWizDB(__global[0], buffer, "0.txt");
@@ -1126,25 +1138,39 @@ namespace wiz {
 						SaveWizDB(__global[6], buffer, "6.txt");
 						SaveWizDB(__global[7], buffer, "7.txt");
 						*/
+						SaveToFile(wiz::toStr(L) + "_" + wiz::toStr(0) + ".eu4", *(*pool)[0], (*pool)[0]->root);
 
 						for (int i = 1; i < pivots.size() + 1; ++i) {
 							// linearly merge and error check...
 							//SaveWizDB(__global[0], buffer, "8.txt");
 							//SaveWizDB(next[i-1], buffer, "9.txt");
+							Pointer newNode;
+							int err = //Merge(next[i - 1], __global[i], &next[i]);
+								FalseMerge(next[i - 1], __global[i], &newNode, *(*pool)[i]);
 
-							int err = Merge(next[i - 1], __global[i], &next[i]);
+							SaveToFile(wiz::toStr(L) + "_" + wiz::toStr(i) + ".eu4", 
+								*(*pool)[i], newNode.node_idx);
+
+						
 							if (-1 == err) {
 								std::cout << "not valid file4\n";
 								throw 4;
-							}
+							}	/*
 							else if (i == pivots.size() && 1 == err) {
 								std::cout << "not valid file5\n";
 								throw 5;
 							}
+							*/
 						}
 
 						_global = __global[0];
-						_pool = pool;
+					//	_pool = pool;
+
+						for (int i = 0; i < pivots.size() + 1; ++i) {
+							(*pool)[i]->Clear();
+							delete (*pool)[i];
+							(*pool)[i] = nullptr;
+						}
 					}
 					catch (...) {
 						delete[] token_arr;
@@ -1162,6 +1188,32 @@ namespace wiz {
 			}
 
 			delete[] token_arr;
+
+			{	
+				std::vector<MemoryPool*>* pool = new std::vector<MemoryPool*>();
+				pool->push_back(new MemoryPool);
+
+				LoadFromFile("1_0.eu4", *(*pool)[0]);
+
+				_pool = pool;
+				_global.pool = (*pool)[0];
+				_global.isNULL = false;
+				_global.node_idx = (*pool)[0]->root;
+				_global.pool_idx = -1;
+				_global->This.node_idx = (*pool)[0]->root;
+				_global->This.pool = (*pool)[0];
+
+				for (long long x = 0; x < (*pool)[0]->count; ++x) {
+					MemoryPool* y = (*pool)[0];
+					Node* z = (*y)[x];
+					z->This.pool = (*pool)[0];
+					z->child.pool = (*pool)[0];
+					z->first.pool = (*pool)[0];
+					z->last.pool = (*pool)[0];
+					z->parent.pool = (*pool)[0];
+					z->next.pool = (*pool)[0];
+				}
+			}
 
 			*_buffer = buffer;
 			*global = _global;
