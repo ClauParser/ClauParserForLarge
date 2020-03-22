@@ -1311,6 +1311,8 @@ namespace wiz {
 
 		static bool _LoadData(InFileReserver& reserver, Pointer* global, const wiz::LoadDataOption option, char** _buffer, std::vector<wiz::MemoryPool*>*& _pool, const int parse_num) // first, strVec.empty() must be true!!
 		{
+			std::vector<long long> start, last;
+
 			const int pivot_num = parse_num - 1;
 			char* buffer = nullptr;
 			long long* token_arr = nullptr;
@@ -1381,9 +1383,11 @@ namespace wiz {
 					std::vector<std::thread> thr(pivots.size() + 1);
 
 					{
+						start.push_back(0);
 						long long idx = pivots.empty() ? num_end : pivots[0];
 						long long _token_arr_len = idx - 0 + 1;
 
+						last.push_back(idx);
 
 						thr[0] = std::thread(__LoadData, buffer, token_arr, _token_arr_len, &__global[0], &option, 0, 0, &next[0], (*pool)[0]);
 					}
@@ -1392,11 +1396,16 @@ namespace wiz {
 						long long _token_arr_len = pivots[i] - (pivots[i - 1] + 1) + 1;
 
 						thr[i] = std::thread(__LoadData, buffer, token_arr + pivots[i - 1] + 1, _token_arr_len, &__global[i], &option, 0, 0, &next[i], (*pool)[i]);
-
+							
+						start.push_back(pivots[i - 1] + 1);
+						last.push_back(pivots[i]);
 					}
 
 					if (pivots.size() >= 1) {
 						long long _token_arr_len = num_end - 1 - (pivots.back() + 1) + 1;
+
+						start.push_back(pivots.back() + 1);
+						last.push_back(num_end - 1);
 
 						thr[pivots.size()] = std::thread(__LoadData, buffer, token_arr + pivots.back() + 1, _token_arr_len, &__global[pivots.size()],
 							&option, 0, 0, &next[pivots.size()], (*pool)[pivots.size()]);
@@ -1428,7 +1437,7 @@ namespace wiz {
 						SaveWizDB(__global[6], buffer, "6.txt");
 						SaveWizDB(__global[7], buffer, "7.txt");
 						*/
-						SaveToFile(wiz::toStr(L) + "_" + wiz::toStr(0) + ".eu4", *(*pool)[0], (*pool)[0]->root);
+					//	SaveToFile(wiz::toStr(L) + "_" + wiz::toStr(0) + ".eu4", *(*pool)[0], (*pool)[0]->root);
 
 						for (int i = 1; i < pivots.size() + 1; ++i) {
 							// linearly merge and error check...
@@ -1438,8 +1447,8 @@ namespace wiz {
 							int err = //Merge(next[i - 1], __global[i], &next[i]);
 								FalseMerge(next[i - 1], __global[i], &newNode, *(*pool)[i]);
 
-							SaveToFile(wiz::toStr(L) + "_" + wiz::toStr(i) + ".eu4", 
-								*(*pool)[i], newNode.node_idx);
+						//	SaveToFile(wiz::toStr(L) + "_" + wiz::toStr(i) + ".eu4", 
+						//		*(*pool)[i], newNode.node_idx);
 
 						
 							if (-1 == err) {
@@ -1477,12 +1486,19 @@ namespace wiz {
 				}
 			}
 
-			delete[] token_arr;
+			//delete[] token_arr;
 
 			{	
+				Pointer global;
+				Pointer next;
 				std::vector<MemoryPool*>* pool = new std::vector<MemoryPool*>();
 				pool->push_back(new MemoryPool);
 
+				__LoadData(buffer, token_arr + start[0], last[0] - start[0] + 1, &global, &option, 0, 0, &next, (*pool)[0]);
+
+				_pool = pool;
+				_global = global;
+/*
 				LoadFromFile("1_0.eu4", *(*pool)[0]);
 
 				_pool = pool;
@@ -1502,9 +1518,9 @@ namespace wiz {
 					z->last.pool = (*pool)[0];
 					z->parent.pool = (*pool)[0];
 					z->next.pool = (*pool)[0];
-				}
+				}*/
 			}
-
+		
 			*_buffer = buffer;
 			*global = _global;
 
